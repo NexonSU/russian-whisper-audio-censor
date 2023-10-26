@@ -13,6 +13,7 @@ from tkinter import ttk
 from tkinter import filedialog
 
 wavfile = ""
+audio_result = 0
 
 class PrintLogger(): # create file like object
     def __init__(self, textbox): # pass reference to text widget
@@ -34,7 +35,7 @@ class _CustomProgressBar(tqdm.tqdm):
         super().update(n)
         self._current += n
         if process_progressbar["value"] == 0:
-            print("Transcribing...")
+            print_log("Transcribing...")
         process_progressbar["value"] = round(self._current/self.total*100)
 
 def select_file():
@@ -60,7 +61,14 @@ def select_file():
 
         wavfile = filename
 
+def print_log(text):
+    process_log.configure(state=NORMAL)
+    print(text)
+    process_log.configure(state=DISABLED)
+    process_log.see(END)
+
 def transcribe():
+    global audio_result
     modelname = whisper.load_model(model.get())
     result = modelname.transcribe(audio=wavfile, word_timestamps=True, language=language.get())
 
@@ -73,38 +81,35 @@ def transcribe():
     for segment in result["segments"]:
         for word in segment["words"]:
             word["word"] = regex.sub('', word["word"]).lower()
+            print_log(word["word"])
             if word["word"] in word_filter:
-                print("Word", word["word"], "detected at", word["start"])
+                print_log("Word", word["word"], "detected at", word["start"])
 
-                # keep sound before silence
                 s = a[begin*1000:word["start"]*1000]
                 parts.append(s)  
                 
-                # create silence
                 duration = (word["end"] - word["start"]) * 1000
-                #s = AudioSegment.silent(duration)
                 s = Sine(1000).to_audio_segment(duration).apply_gain(-20)
                 parts.append(s)
 
-                # value for next loop
                 begin = word["end"]
 
     parts.append(a[begin*1000:])
+ 
+    audio_result = sum(parts[1:], parts[0])
 
-    # join all parts using standard `sum()` but it need `parts[0]` as start value   
-    b = sum(parts[1:], parts[0])
+    process_button.configure(state=NORMAL)
 
-    # save it
+def save_file():
     f = filedialog.asksaveasfilename(defaultextension=".wav")
     if f is None or f == "":
-        os._exit(0)
-    b.export(f, format='wav')
-    os._exit(0)
+        return
+    audio_result.export(f, format='wav')
 
 def start_transcribe_thread(event):
-    print("Whisper is initializing...")
+    print_log("Whisper is initializing...")
     process_progressbar["value"] = 0
-    process_button.configure(state=DISABLED)
+    process_button.configure(state=DISABLED, text="Save", command=save_file)
     transcribe_thread = threading.Thread(target=transcribe)
     transcribe_thread.daemon = True
     transcribe_thread.start()
@@ -120,38 +125,39 @@ if __name__ == '__main__':
 
     gui.grid_columnconfigure(0, weight=1)
 
-    source_label = Label(gui, text="Source", padx=1)
+    source_label = Label(gui, text="Source", padx=5)
     source_label.grid(row=0, column=0, sticky='e')
     source_field = Entry(gui, state=DISABLED, width=50)
-    source_field.grid(row=0, column=1, sticky='we', columnspan=2)
-    source_button = Button(gui, text='Browse', command=select_file, padx=1)
-    source_button.grid(row=0, column=3, sticky='w')
+    source_field.grid(row=0, column=1, sticky='we', columnspan=3)
+    source_button = Button(gui, text='Browse', command=select_file, padx=5)
+    source_button.grid(row=0, column=4, sticky='w')
 
     languages = ["Afrikaans","Albanian","Amharic","Arabic","Armenian","Assamese","Azerbaijani","Bashkir","Basque","Belarusian","Bengali","Bosnian","Breton","Bulgarian","Burmese","Castilian","Catalan","Chinese","Croatian","Czech","Danish","Dutch","English","Estonian","Faroese","Finnish","Flemish","French","Galician","Georgian","German","Greek","Gujarati","Haitian","Haitian" "Creole","Hausa","Hawaiian","Hebrew","Hindi","Hungarian","Icelandic","Indonesian","Italian","Japanese","Javanese","Kannada","Kazakh","Khmer","Korean","Lao","Latin","Latvian","Letzeburgesch","Lingala","Lithuanian","Luxembourgish","Macedonian","Malagasy","Malay","Malayalam","Maltese","Maori","Marathi","Moldavian","Moldovan","Mongolian","Myanmar","Nepali","Norwegian","Nynorsk","Occitan","Panjabi","Pashto","Persian","Polish","Portuguese","Punjabi","Pushto","Romanian","Russian","Sanskrit","Serbian","Shona","Sindhi","Sinhala","Sinhalese","Slovak","Slovenian","Somali","Spanish","Sundanese","Swahili","Swedish","Tagalog","Tajik","Tamil","Tatar","Telugu","Thai","Tibetan","Turkish","Turkmen","Ukrainian","Urdu","Uzbek","Valencian","Vietnamese","Welsh","Yiddish","Yoruba"]
-    language_label = Label(gui, text="Language", padx=1)
+    language_label = Label(gui, text="Language", padx=5)
     language_label.grid(row=1, column=0, sticky='e')
     language = StringVar(gui)
     language.set("Russian")
     language_optionmenu = OptionMenu(gui, language, *languages)
     language_optionmenu.grid(row=1, column=1, sticky='w')
     models = ["tiny.en","tiny","base.en","base","small.en","small","medium.en","medium","large-v1","large-v2","large"]
-    model_label = Label(gui, text="Model", padx=1)
-    model_label.grid(row=1, column=2, sticky='e')
+    model_label = Label(gui, text="Model", padx=5)
+    model_label.grid(row=1, column=3, sticky='e')
     model = StringVar(gui)
     model.set("large")
     model_optionmenu = OptionMenu(gui, model, *models)
-    model_optionmenu.grid(row=1, column=3, sticky='w')
+    model_optionmenu.grid(row=1, column=4, sticky='w')
 
-    process_button = Button(gui, text='Start', command=lambda:start_transcribe_thread(None), padx=1, state=DISABLED)
-    process_button.grid(row=3, column=0, columnspan=4)
+    process_button = Button(gui, text='Start', command=lambda:start_transcribe_thread(None), padx=5, state=DISABLED)
+    process_button.grid(row=1, column=2)
+
     process_progressbar = ttk.Progressbar(gui, orient="horizontal", length=100, value=0)
-    process_progressbar.grid(row=4, column=0, columnspan=4, sticky='we')
+    process_progressbar.grid(row=4, column=0, columnspan=5, sticky='we')
     process_progressbar.columnconfigure(0, weight=1)
-    process_log = Text(gui, wrap="none")
-    process_log.grid(row=5, column=0, columnspan=4, sticky='we')
+    process_log = Text(gui, wrap="none", height=11, state=DISABLED)
+    process_log.grid(row=5, column=0, columnspan=5, sticky='w')
     process_log.columnconfigure(0, weight=1)
     sys.stdout = PrintLogger(process_log)
 
-    print("Select file, language and model")
+    print_log("Select file, language and model")
 
     gui.mainloop()
