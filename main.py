@@ -1,3 +1,4 @@
+import logging
 import os
 import sys
 import threading
@@ -81,9 +82,9 @@ def transcribe():
     for segment in result["segments"]:
         for word in segment["words"]:
             word["word"] = regex.sub('', word["word"]).lower()
-            print_log(word["word"])
+            #print_log(word["word"])
             if word["word"] in word_filter:
-                print_log("Word", word["word"], "detected at", word["start"])
+                print_log("Word " + str(word["word"]) + " detected at " + str(word["start"]))
 
                 s = a[begin*1000:word["start"]*1000]
                 parts.append(s)  
@@ -98,7 +99,11 @@ def transcribe():
  
     audio_result = sum(parts[1:], parts[0])
 
+    print_log("Done.")
+
     process_button.configure(state=NORMAL)
+
+    save_file()
 
 def save_file():
     f = filedialog.asksaveasfilename(defaultextension=".wav")
@@ -115,6 +120,15 @@ def start_transcribe_thread(event):
     transcribe_thread.start()
 
 if __name__ == '__main__':
+    root = logging.getLogger()
+    root.setLevel(logging.WARN)
+
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setLevel(logging.WARN)
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    handler.setFormatter(formatter)
+    root.addHandler(handler)
+
     transcribe_module = sys.modules['whisper.transcribe']
     transcribe_module.tqdm.tqdm = _CustomProgressBar
 
