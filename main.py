@@ -154,7 +154,7 @@ if __name__ == '__main__':
     process_progressbar = ttk.Progressbar(gui, orient="horizontal", length=100, value=0)
     process_progressbar.grid(row=4, column=0, columnspan=5, sticky='we')
     process_progressbar.columnconfigure(0, weight=1)
-    process_log = Text(gui, wrap="word", height=11, state=DISABLED)
+    process_log = Text(gui, wrap="none", height=11, state=DISABLED)
     process_log.grid(row=5, column=0, columnspan=5, sticky='w')
     process_log.columnconfigure(0, weight=1)
     sys.stdout = PrintLogger(process_log)
