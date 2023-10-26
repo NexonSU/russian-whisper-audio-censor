@@ -1,2 +1,2 @@
-whisper
+openai-whisper
 pydub
