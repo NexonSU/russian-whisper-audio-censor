@@ -21,8 +21,10 @@ class PrintLogger(): # create file like object
         self.textbox = textbox # keep ref
 
     def write(self, text):
-        self.textbox.insert(END, text) # write text to textbox
-            # could also scroll to end of textbox here to make sure always visible
+        self.textbox.configure(state=NORMAL)
+        self.textbox.insert(END, text)
+        self.textbox.configure(state=DISABLED)
+        self.textbox.see(END)
 
     def flush(self): # needed for file like object
         pass
@@ -36,7 +38,7 @@ class _CustomProgressBar(tqdm.tqdm):
         super().update(n)
         self._current += n
         if process_progressbar["value"] == 0:
-            print_log("Transcribing...")
+            logging.info("Transcribing...")
         process_progressbar["value"] = round(self._current/self.total*100)
 
 def select_file():
@@ -62,12 +64,6 @@ def select_file():
 
         wavfile = filename
 
-def print_log(text):
-    process_log.configure(state=NORMAL)
-    print(text)
-    process_log.configure(state=DISABLED)
-    process_log.see(END)
-
 def transcribe():
     global audio_result
     modelname = whisper.load_model(model.get())
@@ -82,9 +78,9 @@ def transcribe():
     for segment in result["segments"]:
         for word in segment["words"]:
             word["word"] = regex.sub('', word["word"]).lower()
-            #print_log(word["word"])
+            logging.debug("Processing " + word["word"] + " at " + str(word["start"]))
             if word["word"] in word_filter:
-                print_log("Word " + str(word["word"]) + " detected at " + str(word["start"]))
+                logging.info("Word " + str(word["word"]) + " detected at " + str(word["start"]))
 
                 s = a[begin*1000:word["start"]*1000]
                 parts.append(s)  
@@ -99,7 +95,7 @@ def transcribe():
  
     audio_result = sum(parts[1:], parts[0])
 
-    print_log("Done.")
+    logging.info("Done.")
 
     process_button.configure(state=NORMAL)
 
@@ -112,7 +108,7 @@ def save_file():
     audio_result.export(f, format='wav')
 
 def start_transcribe_thread(event):
-    print_log("Whisper is initializing...")
+    logging.info("Whisper is initializing...")
     process_progressbar["value"] = 0
     process_button.configure(state=DISABLED, text="Save", command=save_file)
     transcribe_thread = threading.Thread(target=transcribe)
@@ -120,15 +116,6 @@ def start_transcribe_thread(event):
     transcribe_thread.start()
 
 if __name__ == '__main__':
-    root = logging.getLogger()
-    root.setLevel(logging.WARN)
-
-    handler = logging.StreamHandler(sys.stdout)
-    handler.setLevel(logging.WARN)
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    handler.setFormatter(formatter)
-    root.addHandler(handler)
-
     transcribe_module = sys.modules['whisper.transcribe']
     transcribe_module.tqdm.tqdm = _CustomProgressBar
 
@@ -167,11 +154,22 @@ if __name__ == '__main__':
     process_progressbar = ttk.Progressbar(gui, orient="horizontal", length=100, value=0)
     process_progressbar.grid(row=4, column=0, columnspan=5, sticky='we')
     process_progressbar.columnconfigure(0, weight=1)
-    process_log = Text(gui, wrap="none", height=11, state=DISABLED)
+    process_log = Text(gui, wrap="word", height=11, state=DISABLED)
     process_log.grid(row=5, column=0, columnspan=5, sticky='w')
     process_log.columnconfigure(0, weight=1)
     sys.stdout = PrintLogger(process_log)
+    sys.stderr = PrintLogger(process_log)
 
-    print_log("Select file, language and model")
+
+    root = logging.getLogger()
+    root.setLevel(logging.INFO)
+
+    handler = logging.StreamHandler(PrintLogger(process_log))
+    handler.setLevel(logging.INFO)
+    formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s', datefmt='%H:%M:%S')
+    handler.setFormatter(formatter)
+    root.addHandler(handler)
+
+    logging.info("Select file, language and model")
 
     gui.mainloop()
