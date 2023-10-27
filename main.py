@@ -40,6 +40,7 @@ class _CustomProgressBar(tqdm.tqdm):
         if process_progressbar["value"] == 0:
             logging.info("Распознание речи...")
         process_progressbar["value"] = round(self._current/self.total*100)
+        logging.info(str(round(self._current/self.total*100, 2)) + "%")
 
 def select_file():
     global wavfile
@@ -67,7 +68,7 @@ def select_file():
 def transcribe():
     global audio_result
     modelname = whisper.load_model(model.get())
-    result = modelname.transcribe(audio=wavfile, word_timestamps=True, language=language.get())
+    result = modelname.transcribe(audio=wavfile, word_timestamps=True, language="Russian")
 
     a = AudioSegment.from_wav(wavfile)
     parts = []
@@ -136,11 +137,11 @@ if __name__ == '__main__':
     source_button.grid(row=0, column=4, sticky='w')
 
     languages = ["Afrikaans","Albanian","Amharic","Arabic","Armenian","Assamese","Azerbaijani","Bashkir","Basque","Belarusian","Bengali","Bosnian","Breton","Bulgarian","Burmese","Castilian","Catalan","Chinese","Croatian","Czech","Danish","Dutch","English","Estonian","Faroese","Finnish","Flemish","French","Galician","Georgian","German","Greek","Gujarati","Haitian","Haitian" "Creole","Hausa","Hawaiian","Hebrew","Hindi","Hungarian","Icelandic","Indonesian","Italian","Japanese","Javanese","Kannada","Kazakh","Khmer","Korean","Lao","Latin","Latvian","Letzeburgesch","Lingala","Lithuanian","Luxembourgish","Macedonian","Malagasy","Malay","Malayalam","Maltese","Maori","Marathi","Moldavian","Moldovan","Mongolian","Myanmar","Nepali","Norwegian","Nynorsk","Occitan","Panjabi","Pashto","Persian","Polish","Portuguese","Punjabi","Pushto","Romanian","Russian","Sanskrit","Serbian","Shona","Sindhi","Sinhala","Sinhalese","Slovak","Slovenian","Somali","Spanish","Sundanese","Swahili","Swedish","Tagalog","Tajik","Tamil","Tatar","Telugu","Thai","Tibetan","Turkish","Turkmen","Ukrainian","Urdu","Uzbek","Valencian","Vietnamese","Welsh","Yiddish","Yoruba"]
-    language_label = Label(gui, text="Язык", padx=5, state=DISABLED)
+    language_label = Label(gui, text="Язык", padx=5)
     language_label.grid(row=1, column=0, sticky='e')
     language = StringVar(gui)
     language.set("Русский")
-    language_optionmenu = OptionMenu(gui, language, *languages)
+    language_optionmenu = OptionMenu(gui, language, *languages, state=DISABLED)
     language_optionmenu.grid(row=1, column=1, sticky='w')
     #models = ["tiny.en","tiny","base.en","base","small.en","small","medium.en","medium","large-v1","large-v2","large"]
     models = ["tiny","base","small","medium","large"]
@@ -154,7 +155,7 @@ if __name__ == '__main__':
     process_button = Button(gui, text='Запуск', command=lambda:start_transcribe_thread(None), padx=5, state=DISABLED)
     process_button.grid(row=1, column=2)
 
-    process_progressbar = ttk.Progressbar(gui, orient="horizontal", length=100, value=0)
+    process_progressbar = ttk.Progressbar(gui, orient="horizontal", maximum=100, value=0)
     process_progressbar.grid(row=4, column=0, columnspan=5, sticky='we')
     process_progressbar.columnconfigure(0, weight=1)
     process_log = Text(gui, wrap="none", height=11, state=DISABLED)
