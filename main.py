@@ -38,7 +38,7 @@ class _CustomProgressBar(tqdm.tqdm):
         super().update(n)
         self._current += n
         if process_progressbar["value"] == 0:
-            logging.info("Transcribing...")
+            logging.info("Распознание речи...")
         process_progressbar["value"] = round(self._current/self.total*100)
 
 def select_file():
@@ -50,7 +50,7 @@ def select_file():
     )
 
     filename = filedialog.askopenfilename(
-        title='Open a file',
+        title='Открыть файл',
         initialdir='/',
         filetypes=filetypes)
 
@@ -72,15 +72,17 @@ def transcribe():
     a = AudioSegment.from_wav(wavfile)
     parts = []
     begin = 0
-    regex = re.compile('[\W+]')
-    word_filter = io.open("word_filter.txt", mode="r", encoding="utf-8").read().splitlines()
+    #regex = re.compile('[\W+]')
+    filter = re.compile('(?<![а-яё])(?:(?:(?:у|[нз]а|(?:хитро|не)?вз?[ыьъ]|с[ьъ]|(?:и|ра)[зс]ъ?|(?:о[тб]|п[оа]д)[ьъ]?|(?:\S(?=[а-яё]))+?[оаеи-])-?)?(?:[её](?:б(?!о[рй]|рач)|п[уа](?:ц|тс))|и[пб][ае][тцд][ьъ]).*?|(?:(?:н[иеа]|ра[зс]|[зд]?[ао](?:т|дн[оа])?|с(?:м[еи])?|а[пб]ч)-?)?ху(?:[яйиеёю]|л+и(?!ган)).*?|бл(?:[эя]|еа?)(?:[дт][ьъ]?)?|\S*?(?:п(?:[иеё]зд|ид[аое]?р|ед(?:р(?!о)|[аое]р|ик))|бля(?:[дбц]|тс)|[ое]ху[яйиеёю]|хуйн).*?|(?:о[тб]?|про|на|вы)?м(?:анд(?:[ауеыи](?:л(?:и[сзщ])?[ауеиы])?|ой|[ао]в.*?|юк(?:ов|[ауи])?|е[нт]ь|ища)|уд(?:[яаиое].+?|е?н(?:[ьюия]|ей))|[ао]л[ао]ф[ьъ](?:[яиюе]|[еёо]й))|елд[ауые].*?|ля[тд]ь|(?:[нз]а|по)х)(?![а-яё])')
+    #word_filter = io.open("word_filter.txt", mode="r", encoding="utf-8").read().splitlines()
 
     for segment in result["segments"]:
         for word in segment["words"]:
-            word["word"] = regex.sub('', word["word"]).lower()
-            logging.debug("Processing " + word["word"] + " at " + str(word["start"]))
-            if word["word"] in word_filter:
-                logging.info("Word " + str(word["word"]) + " detected at " + str(word["start"]))
+            #word["word"] = regex.sub('', word["word"]).lower()
+            logging.debug("Проверяем " + word["word"] + " на " + str(word["start"]))
+            #if word["word"] in word_filter:
+            if filter.findall(word["word"].lower()):
+                logging.info("Слово " + str(word["word"]) + " обнаружено на " + str(word["start"]))
 
                 s = a[begin*1000:word["start"]*1000]
                 parts.append(s)  
@@ -95,7 +97,7 @@ def transcribe():
  
     audio_result = sum(parts[1:], parts[0])
 
-    logging.info("Done.")
+    logging.info("Готово.")
 
     process_button.configure(state=NORMAL)
 
@@ -108,9 +110,9 @@ def save_file():
     audio_result.export(f, format='wav')
 
 def start_transcribe_thread(event):
-    logging.info("Whisper is initializing...")
+    logging.info("Whisper запускается...")
     process_progressbar["value"] = 0
-    process_button.configure(state=DISABLED, text="Save", command=save_file)
+    process_button.configure(state=DISABLED, text="Сохранить", command=save_file)
     transcribe_thread = threading.Thread(target=transcribe)
     transcribe_thread.daemon = True
     transcribe_thread.start()
@@ -126,29 +128,30 @@ if __name__ == '__main__':
 
     gui.grid_columnconfigure(0, weight=1)
 
-    source_label = Label(gui, text="Source", padx=5)
+    source_label = Label(gui, text="Источник", padx=5)
     source_label.grid(row=0, column=0, sticky='e')
     source_field = Entry(gui, state=DISABLED, width=50)
     source_field.grid(row=0, column=1, sticky='we', columnspan=3)
-    source_button = Button(gui, text='Browse', command=select_file, padx=5)
+    source_button = Button(gui, text='Обзор', command=select_file, padx=5)
     source_button.grid(row=0, column=4, sticky='w')
 
     languages = ["Afrikaans","Albanian","Amharic","Arabic","Armenian","Assamese","Azerbaijani","Bashkir","Basque","Belarusian","Bengali","Bosnian","Breton","Bulgarian","Burmese","Castilian","Catalan","Chinese","Croatian","Czech","Danish","Dutch","English","Estonian","Faroese","Finnish","Flemish","French","Galician","Georgian","German","Greek","Gujarati","Haitian","Haitian" "Creole","Hausa","Hawaiian","Hebrew","Hindi","Hungarian","Icelandic","Indonesian","Italian","Japanese","Javanese","Kannada","Kazakh","Khmer","Korean","Lao","Latin","Latvian","Letzeburgesch","Lingala","Lithuanian","Luxembourgish","Macedonian","Malagasy","Malay","Malayalam","Maltese","Maori","Marathi","Moldavian","Moldovan","Mongolian","Myanmar","Nepali","Norwegian","Nynorsk","Occitan","Panjabi","Pashto","Persian","Polish","Portuguese","Punjabi","Pushto","Romanian","Russian","Sanskrit","Serbian","Shona","Sindhi","Sinhala","Sinhalese","Slovak","Slovenian","Somali","Spanish","Sundanese","Swahili","Swedish","Tagalog","Tajik","Tamil","Tatar","Telugu","Thai","Tibetan","Turkish","Turkmen","Ukrainian","Urdu","Uzbek","Valencian","Vietnamese","Welsh","Yiddish","Yoruba"]
-    language_label = Label(gui, text="Language", padx=5)
+    language_label = Label(gui, text="Язык", padx=5, state=DISABLED)
     language_label.grid(row=1, column=0, sticky='e')
     language = StringVar(gui)
-    language.set("Russian")
+    language.set("Русский")
     language_optionmenu = OptionMenu(gui, language, *languages)
     language_optionmenu.grid(row=1, column=1, sticky='w')
-    models = ["tiny.en","tiny","base.en","base","small.en","small","medium.en","medium","large-v1","large-v2","large"]
-    model_label = Label(gui, text="Model", padx=5)
+    #models = ["tiny.en","tiny","base.en","base","small.en","small","medium.en","medium","large-v1","large-v2","large"]
+    models = ["tiny","base","small","medium","large"]
+    model_label = Label(gui, text="Модель", padx=5)
     model_label.grid(row=1, column=3, sticky='e')
     model = StringVar(gui)
     model.set("large")
     model_optionmenu = OptionMenu(gui, model, *models)
     model_optionmenu.grid(row=1, column=4, sticky='w')
 
-    process_button = Button(gui, text='Start', command=lambda:start_transcribe_thread(None), padx=5, state=DISABLED)
+    process_button = Button(gui, text='Запуск', command=lambda:start_transcribe_thread(None), padx=5, state=DISABLED)
     process_button.grid(row=1, column=2)
 
     process_progressbar = ttk.Progressbar(gui, orient="horizontal", length=100, value=0)
@@ -160,7 +163,6 @@ if __name__ == '__main__':
     sys.stdout = PrintLogger(process_log)
     sys.stderr = PrintLogger(process_log)
 
-
     root = logging.getLogger()
     root.setLevel(logging.INFO)
 
@@ -170,6 +172,6 @@ if __name__ == '__main__':
     handler.setFormatter(formatter)
     root.addHandler(handler)
 
-    logging.info("Select file, language and model")
+    logging.info("Выберите файл, язык и модель")
 
     gui.mainloop()
