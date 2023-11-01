@@ -67,7 +67,7 @@ def transcribe():
     model_optionmenu.configure(state=DISABLED)
     model_label.configure(state=DISABLED)
 
-    modelname = faster_whisper.WhisperModel(model.get(), local_files_only=True)
+    modelname = faster_whisper.WhisperModel(model.get())
     segments, info = modelname.transcribe(audio=wavfile, word_timestamps=True, language="ru", condition_on_previous_text=False, vad_filter=True, no_speech_threshold=0.5)
     total_duration = round(info.duration, 2)
 
