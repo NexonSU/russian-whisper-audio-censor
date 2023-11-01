@@ -1,3 +1,4 @@
+import io
 import logging
 import sys
 import threading
@@ -66,7 +67,7 @@ def transcribe():
     model_optionmenu.configure(state=DISABLED)
     model_label.configure(state=DISABLED)
 
-    modelname = faster_whisper.WhisperModel(model.get())
+    modelname = faster_whisper.WhisperModel(model.get(), local_files_only=True)
     segments, info = modelname.transcribe(audio=wavfile, word_timestamps=True, language="ru", condition_on_previous_text=False, vad_filter=True, no_speech_threshold=0.5)
     total_duration = round(info.duration, 2)
 
@@ -90,6 +91,8 @@ def transcribe():
     regex = re.compile('[\W+]')
     filter = re.compile('(?<![а-яё])(?:(?:(?:у|[нз]а|(?:хитро|не)?вз?[ыьъ]|с[ьъ]|(?:и|ра)[зс]ъ?|(?:о[тб]|п[оа]д)[ьъ]?|(?:\S(?=[а-яё]))+?[оаеи-])-?)?(?:[её](?:б(?!о[рй]|рач)|п[уа](?:ц|тс))|и[пб][ае][тцд][ьъ]).*?|(?:(?:н[иеа]|ра[зс]|[зд]?[ао](?:т|дн[оа])?|с(?:м[еи])?|а[пб]ч)-?)?ху(?:[яйиеёю]|л+и(?!ган)).*?|бл(?:[эя]|еа?)(?:[дт][ьъ]?)?|\S*?(?:п(?:[иеё]зд|ид[аое]?р|ед(?:р(?!о)|[аое]р|ик))|бля(?:[дбц]|тс)|[ое]ху[яйиеёю]|хуйн).*?|(?:о[тб]?|про|на|вы)?м(?:анд(?:[ауеыи](?:л(?:и[сзщ])?[ауеиы])?|ой|[ао]в.*?|юк(?:ов|[ауи])?|е[нт]ь|ища)|уд(?:[яаиое].+?|е?н(?:[ьюия]|ей))|[ао]л[ао]ф[ьъ](?:[яиюе]|[еёо]й))|елд[ауые].*?|ля[тд]ь|(?:[нз]а|по)х)(?![а-яё])')
     #word_filter = io.open("word_filter.txt", mode="r", encoding="utf-8").read().splitlines()
+    whitelist = io.open("whitelist.txt", mode="r", encoding="utf-8").read().splitlines()
+    blacklist = io.open("blacklist.txt", mode="r", encoding="utf-8").read().splitlines()
 
     for segment in segments:
         percent = round(segment.start/total_duration, 2)*100
@@ -115,16 +118,18 @@ def transcribe():
         for word_obj in segment.words:
             word = regex.sub('', word_obj.word).lower()
             logging.debug("Проверяем " + word + " на " + time.strftime('%H:%M:%S', time.gmtime(round(word_obj.start, 2))) + " с " + str(word_obj.probability))
-            #if word["word"] in word_filter:
-            if filter.findall(word):
+            #if word in word_filter:
+            if word not in whitelist and (word in blacklist or filter.findall(word)):
                 logging.info("Слово " + str(word) + " обнаружено на " + time.strftime('%H:%M:%S', time.gmtime(round(word_obj.start, 2))))
 
                 s = a[last_badword_end*1000:word_obj.start*1000]
                 audio_result = audio_result + s
                 
                 duration = (word_obj.end - word_obj.start) * 1000
-                s = Sine(1000).to_audio_segment(duration).apply_gain(-25)
+                audio_result = audio_result + a[word_obj.start*1000:word_obj.start*1000+duration*0.3]
+                s = Sine(1000).to_audio_segment(duration*0.4).apply_gain(-25)
                 audio_result = audio_result + s
+                audio_result = audio_result + a[word_obj.end*1000-duration*0.3:word_obj.end*1000]
                 last_badword_end = word_obj.end
         audio_result = audio_result + a[last_badword_end*1000:segment.end*1000]
         last_segment_end = segment.end
