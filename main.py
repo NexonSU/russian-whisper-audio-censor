@@ -1,40 +1,27 @@
 import glob
 import io
 import logging
-import multiprocessing
 import os
-import sys
 import threading
 import time
-from tkinter import messagebox
+import faster_whisper
 import torch
 import psutil
-import faster_whisper
-import faster_whisper.transcribe 
 import re
 from pydub import AudioSegment
 from pydub.generators import Sine
 from tkinter import *
 from tkinter import ttk
+from tkinter import messagebox
 from tkinter import filedialog
 import sv_ttk
-import sys
+
+logging.basicConfig(level=logging.INFO, datefmt='%H:%M:%S', format='[%(levelname)s] %(asctime)s: %(message)s')
 
 model = ""
 wavfiles = []
 start_time = 0
 loading = False
-
-class PrintLogger(): # create file like object
-    def __init__(self, textbox): # pass reference to text widget
-        self.textbox = textbox # keep ref
-
-    def write(self, text):
-        self.textbox.insert(END, text)
-        self.textbox.see(END)
-
-    def flush(self): # needed for file like object
-        pass
 
 def select_file():
     global wavfiles
@@ -54,15 +41,17 @@ def select_file():
         for file in glob.glob(folder+'/*.wav'):
             if "_clean.wav" not in file:
                 wavfiles.append(file)
+                logging.info("Обнаружен файл: " + file)
     else:
         messagebox.showwarning(title="Файлы не найдены", message="В указанной папке нет wav-файлов.")
 
-def transcribe():
+def whisper_transcribe():
     global loading
 
-    process_button.configure(state=DISABLED)
-    source_label.configure(state=DISABLED)
-    source_button.configure(state=DISABLED)
+    set_gui_state(DISABLED)
+
+    with open(os.path.dirname(wavfiles[0]) + "/stats.txt", "a", encoding="utf8") as stats:
+        stats.write("--- " + time.strftime('%Y.%m.%d %H:%M:%S') + "\n")
 
     if torch.cuda.is_available():
         logging.info('Используется GPU')
@@ -82,7 +71,7 @@ def transcribe():
 
         logging.info("Начинаю обработку " + os.path.basename(wavfile))
 
-        modelname = faster_whisper.WhisperModel(model.get())
+        modelname = faster_whisper.WhisperModel(model.get().removeprefix("whisper-"))
         segments, info = modelname.transcribe(audio=wavfile, word_timestamps=True, language="ru", condition_on_previous_text=False, vad_filter=True, no_speech_threshold=0.5)
         total_duration = round(info.duration, 2)
 
@@ -92,70 +81,70 @@ def transcribe():
         start_time = time.time()
 
         a = AudioSegment.from_wav(wavfile)
-        last_segment_end = 0
+        last_end = 0
+        badword_count = 0
+        transcription = ""
+        scale_badword = censor_scale.get()/100
+        scale_audio = (1-scale_badword)/2
         regex = re.compile('[\W+]')
         filter = re.compile('(?<![а-яё])(?:(?:(?:у|[нз]а|(?:хитро|не)?вз?[ыьъ]|с[ьъ]|(?:и|ра)[зс]ъ?|(?:о[тб]|п[оа]д)[ьъ]?|(?:\S(?=[а-яё]))+?[оаеи-])-?)?(?:[её](?:б(?!о[рй]|рач)|п[уа](?:ц|тс))|и[пб][ае][тцд][ьъ]).*?|(?:(?:н[иеа]|ра[зс]|[зд]?[ао](?:т|дн[оа])?|с(?:м[еи])?|а[пб]ч)-?)?ху(?:[яйиеёю]|л+и(?!ган)).*?|бл(?:[эя]|еа?)(?:[дт][ьъ]?)?|\S*?(?:п(?:[иеё]зд|ид[аое]?р|ед(?:р(?!о)|[аое]р|ик))|бля(?:[дбц]|тс)|[ое]ху[яйиеёю]|хуйн).*?|(?:о[тб]?|про|на|вы)?м(?:анд(?:[ауеыи](?:л(?:и[сзщ])?[ауеиы])?|ой|[ао]в.*?|юк(?:ов|[ауи])?|е[нт]ь|ища)|уд(?:[яаиое].+?|е?н(?:[ьюия]|ей))|[ао]л[ао]ф[ьъ](?:[яиюе]|[еёо]й))|елд[ауые].*?|ля[тд]ь|(?:[нз]а|по)х)(?![а-яё])')
-        #word_filter = io.open("word_filter.txt", mode="r", encoding="utf-8").read().splitlines()
         whitelist = io.open("whitelist.txt", mode="r", encoding="utf-8").read().splitlines()
         blacklist = io.open("blacklist.txt", mode="r", encoding="utf-8").read().splitlines()
 
         for segment in segments:
             percent = round(segment.start/total_duration, 2)*100
             process_progressbar.configure(value=percent, mode='determinate')
-            if segment.start - last_segment_end > 5:
-                # s = a[last_segment_end*1000:(last_segment_end+1)*1000]
-                # s.fade_out(1000)
-                # audio_result = audio_result + s
-                # audio_result = audio_result + AudioSegment.silent((segment.start - last_segment_end - 2) * 1000)
-                # s = a[(segment.start - 1)*1000:segment.start*1000]
-                # s.fade_in(1000)
-                # audio_result = audio_result + s
-                audio_result = audio_result + a[last_segment_end*1000:segment.start*1000]
-            else:
-                audio_result = audio_result + a[last_segment_end*1000:segment.start*1000]
             if percent > 0 and percent < 99:
                 eta = round(((time.time() - start_time)/percent * (100 - percent)))
                 style.configure('text.Horizontal.TProgressbar', text=str(round(percent))+'% ETA: ' + time.strftime('%H:%M:%S', time.gmtime(eta)))
             if percent == 100:
                 style.configure('text.Horizontal.TProgressbar', text='99%')
-            logging.debug(time.strftime('%H:%M:%S', time.gmtime(round(segment.start, 2))) + " - " + segment.text.removeprefix(" "))
-            last_badword_end = segment.start
+            current_line = time.strftime('%H:%M:%S: ', time.gmtime(round(segment.start, 2))) + segment.text.removeprefix(" ")
+            logging.debug(current_line)
+            transcription += current_line + "\n"
             for word_obj in segment.words:
                 word = regex.sub('', word_obj.word).lower()
                 logging.debug("Проверяем " + word + " на " + time.strftime('%H:%M:%S', time.gmtime(round(word_obj.start, 2))) + " с " + str(word_obj.probability))
-                #if word in word_filter:
                 if word not in whitelist and (word in blacklist or filter.findall(word)):
                     logging.info("Слово " + str(word) + " обнаружено на " + time.strftime('%H:%M:%S', time.gmtime(round(word_obj.start, 2))))
-
-                    s = a[last_badword_end*1000:word_obj.start*1000]
-                    audio_result = audio_result + s
-                    
+                    badword_count += 1
+                    audio_result += a[last_end*1000:word_obj.start*1000]
                     duration = (word_obj.end - word_obj.start) * 1000
-                    audio_result = audio_result + a[word_obj.start*1000:word_obj.start*1000+duration*0.3]
-                    s = Sine(1000).to_audio_segment(duration*0.4).apply_gain(-25)
-                    audio_result = audio_result + s
-                    audio_result = audio_result + a[word_obj.end*1000-duration*0.3:word_obj.end*1000]
-                    last_badword_end = word_obj.end
-            audio_result = audio_result + a[last_badword_end*1000:segment.end*1000]
-            last_segment_end = segment.end
+                    audio_result += a[word_obj.start*1000:word_obj.start*1000+duration*scale_audio]
+                    audio_result += Sine(1000).to_audio_segment(duration*scale_badword).apply_gain(-25)
+                    audio_result += a[word_obj.end*1000-duration*scale_audio:word_obj.end*1000]
+                    last_end = word_obj.end
 
-        # audio_result = audio_result + a[last_segment_end*1000:(last_segment_end + 2)*1000]
-        # audio_result = audio_result + AudioSegment.silent(len(a[(last_segment_end + 2)*1000:]))
-        audio_result = audio_result + a[last_segment_end*1000:]
+        audio_result += a[last_end*1000:]
 
         process_progressbar.configure(value=100, mode='determinate')
         style.configure('text.Horizontal.TProgressbar', text='100%')
 
         wavfile_export = os.path.splitext(wavfile)[0]+'_clean.wav'
+        transcription_export = os.path.splitext(wavfile)[0]+'_transcription.txt'
 
+        with open(transcription_export, "w", encoding="utf8") as text_file:
+            text_file.write(transcription)
         audio_result.export(wavfile_export, format='wav')
 
-        logging.info("Готово. Результат сохранён в файл " + os.path.basename(wavfile_export))
+        with open(os.path.dirname(wavfile) + "/stats.txt", "a", encoding="utf8") as stats:
+            stats.write(os.path.basename(wavfile) + " содержит матов: " + str(badword_count) + ".\n")
+
+        logging.info("Матов обнаружено: " + str(badword_count) + ".")
+        logging.info("Результат сохранён в файл " + os.path.basename(wavfile_export))
     
+    logging.info("Все операции завершены.")
     process_progressbar.configure(value=0, mode='determinate')
-    process_button.configure(state=NORMAL)
-    source_label.configure(state=NORMAL)
-    source_button.configure(state=NORMAL)
+    set_gui_state(NORMAL)
+
+def set_gui_state(state):
+    process_button.configure(state=state)
+    source_label.configure(state=state)
+    source_button.configure(state=state)
+    model_label.configure(state=state)
+    model_optionmenu.configure(state=state)
+    censor_label.configure(state=state)
+    censor_scale.configure(state=state)
 
 def progressbar_load():
     global loading
@@ -173,7 +162,8 @@ def progressbar_load():
     exit()
 
 def start_transcribe_thread():
-    transcribe_thread = threading.Thread(target=transcribe)
+    if "whisper" in model.get():
+        transcribe_thread = threading.Thread(target=whisper_transcribe)
     transcribe_thread.daemon = True
     transcribe_thread.start()
 
@@ -182,18 +172,37 @@ def start_progressbar_thread():
     progressbar_thread.daemon = True
     progressbar_thread.start()
 
-def set_model(value):
-    global model
-    model = value
+def set_debug_level(value):
+    global logger
+    if value == "CRITICAL":
+        logging.getLogger().setLevel(logging.CRITICAL)
+    elif value == "ERROR":
+        logging.getLogger().setLevel(logging.ERROR)
+    elif value == "WARN":
+        logging.getLogger().setLevel(logging.WARN)
+    elif value == "INFO":
+        logging.getLogger().setLevel(logging.INFO)
+    elif value == "DEBUG":
+        logging.getLogger().setLevel(logging.DEBUG)
+    else:
+        logging.getLogger().setLevel(logging.NOTSET)
 
 def censor_scale_text(value):
    censor_label.config(text = "Длительность звука цензуры (" + str(value.split(".")[0]) + "%)")
 
 if __name__ == '__main__':
+    if not os.path.isfile("whitelist.txt"):
+        with open("whitelist.txt", "w", encoding="utf8") as file:
+            file.write("мудак")
+
+    if not os.path.isfile("blacklist.txt"):
+        with open("blacklist.txt", "w", encoding="utf8") as file:
+            file.write("хуй")
+    
     gui = Tk()
     gui.title('Audio Censor')
-    gui.geometry('900x650')
-    gui.minsize(900, 650)
+    gui.geometry('600x150')
+    gui.resizable(False, False)
     gui.columnconfigure(tuple(range(60)), weight=1)
 
     source_frame = ttk.Frame(gui)
@@ -232,54 +241,34 @@ if __name__ == '__main__':
     language_optionmenu.grid(row=0, column=1, padx=5, pady=5, sticky=W)
 
     #models = ["tiny.en","tiny","base.en","base","small.en","small","medium.en","medium","large-v1","large-v2","large"]
-    models = ["tiny","base","small","medium","large"]
+    models = ["whisper-tiny","whisper-base","whisper-small","whisper-medium","whisper-large"]
     model_label = ttk.Label(options_frame, text="Модель")
-    model_label.grid(row=1, column=0, padx=5, pady=5, sticky=E)
+    model_label.grid(row=0, column=2, padx=5, pady=5, sticky=E)
     model = StringVar(options_frame)
-    model.set("large")
-    model_optionmenu = ttk.OptionMenu(options_frame, model, "large", *models)
-    model_optionmenu.grid(row=1, column=1, padx=5, pady=5, sticky=W)
+    model.set("whisper-large")
+    model_optionmenu = ttk.OptionMenu(options_frame, model, "whisper-large", *models)
+    model_optionmenu.grid(row=0, column=3, padx=5, pady=5, sticky=W)
 
-    theme_label = ttk.Label(options_frame, text="Тема")
-    theme_label.grid(row=2, column=0, padx=5, pady=5, sticky=E)
-    theme_button = ttk.Button(options_frame, text="Переключить", command=sv_ttk.toggle_theme)
-    theme_button.grid(row=2, column=1, padx=5, pady=5, sticky=W)
+    debug_levels = ["NOTSET","DEBUG","INFO","WARN","ERROR","CRITICAL"]
+    debug_label = ttk.Label(options_frame, text="Уровень лога")
+    debug_label.grid(row=0, column=4, padx=5, pady=5, sticky=E)
+    debug_level = StringVar(options_frame)
+    debug_level.set("INFO")
+    debug_optionmenu = ttk.OptionMenu(options_frame, debug_level, "INFO", *debug_levels, command=set_debug_level)
+    debug_optionmenu.grid(row=0, column=5, padx=5, pady=5, sticky=W)
 
-    censor_label = ttk.Label(options_frame, text="Длительность звука цензуры (75%)")
-    censor_label.grid(row=3, column=0, padx=5, pady=5, sticky=E)
-    censor_scale = ttk.Scale(options_frame, from_=0, to=100, value=75, orient=HORIZONTAL, command=censor_scale_text)
-    censor_scale.grid(row=3, column=1, padx=5, pady=5, sticky=W)
+    options_frame2 = ttk.Frame(gui)
+    options_frame2.pack(side=TOP)
+    theme_label = ttk.Label(options_frame2, text="Тема")
+    theme_label.grid(row=0, column=0, padx=5, pady=5, sticky=E)
+    theme_button = ttk.Button(options_frame2, text="Переключить", command=sv_ttk.toggle_theme)
+    theme_button.grid(row=0, column=1, padx=5, pady=5, sticky=W)
+    censor_label = ttk.Label(options_frame2, text="Длительность звука цензуры (75%)")
+    censor_label.grid(row=0, column=2, padx=5, pady=5, sticky=E)
+    censor_scale = ttk.Scale(options_frame2, from_=0, to=100, value=75, orient=HORIZONTAL, command=censor_scale_text)
+    censor_scale.grid(row=0, column=3, padx=5, pady=5, sticky=W)
 
-    log_frame = ttk.Frame(gui)
-    log_frame.pack(side=TOP)
-    process_log = Text(log_frame, wrap="none", width=2000, height=31)
-    process_log.pack(side=LEFT)
-    xsb = ttk.Scrollbar(gui, orient = HORIZONTAL)
-    ysb = ttk.Scrollbar(log_frame)
-    ysb.configure(command = process_log.yview)
-    ysb.pack(side=RIGHT)
-    ysb.lift()
-    xsb.configure(command = process_log.xview)
-    xsb.pack(side=TOP)
-    xsb.lift()
-    process_log.configure(yscrollcommand = ysb.set, xscrollcommand = xsb.set)
-
-    # process_log = Text(gui, wrap="none", height=2000, width=2000, state=DISABLED)
-    # process_log.pack()
-    # process_log.columnconfigure(0, weight=1)
-
-    sys.stdout = PrintLogger(process_log)
-    sys.stderr = PrintLogger(process_log)
-    root = logging.getLogger()
-    root.setLevel(logging.INFO)
-
-    handler = logging.StreamHandler(PrintLogger(process_log))
-    handler.setLevel(logging.INFO)
-    formatter = logging.Formatter('%(asctime)s: %(message)s', datefmt='%H:%M:%S')
-    handler.setFormatter(formatter)
-    root.addHandler(handler)
-
-    logging.info("Выберите файл, язык и модель")
+    logging.info("Укажите папку с wav файлами.")
 
     sv_ttk.use_dark_theme()
 
