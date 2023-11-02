@@ -2,6 +2,7 @@ import glob
 import io
 import logging
 import os
+import sys
 import threading
 import time
 import faster_whisper
@@ -159,7 +160,7 @@ def progressbar_load():
             increment = 1
         process_progressbar.configure(value=value, mode='indeterminate')
         time.sleep(0.03)
-    exit()
+    sys.exit(0)
 
 def start_transcribe_thread():
     if "whisper" in model.get():
