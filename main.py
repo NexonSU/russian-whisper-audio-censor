@@ -73,7 +73,7 @@ def whisper_transcribe():
         logging.info("Начинаю обработку " + os.path.basename(wavfile))
 
         modelname = faster_whisper.WhisperModel(model.get().removeprefix("whisper-"))
-        segments, info = modelname.transcribe(audio=wavfile, word_timestamps=True, language="ru", condition_on_previous_text=False, vad_filter=True, no_speech_threshold=0.5)
+        segments, info = modelname.transcribe(audio=wavfile, word_timestamps=True, condition_on_previous_text=False, vad_filter=True, no_speech_threshold=0.5)
         total_duration = round(info.duration, 2)
 
         loading = False
@@ -231,12 +231,12 @@ if __name__ == '__main__':
     options_frame = ttk.Frame(gui)
     options_frame.pack(side=TOP)
     #languages = ["Afrikaans","Albanian","Amharic","Arabic","Armenian","Assamese","Azerbaijani","Bashkir","Basque","Belarusian","Bengali","Bosnian","Breton","Bulgarian","Burmese","Castilian","Catalan","Chinese","Croatian","Czech","Danish","Dutch","English","Estonian","Faroese","Finnish","Flemish","French","Galician","Georgian","German","Greek","Gujarati","Haitian","Haitian" "Creole","Hausa","Hawaiian","Hebrew","Hindi","Hungarian","Icelandic","Indonesian","Italian","Japanese","Javanese","Kannada","Kazakh","Khmer","Korean","Lao","Latin","Latvian","Letzeburgesch","Lingala","Lithuanian","Luxembourgish","Macedonian","Malagasy","Malay","Malayalam","Maltese","Maori","Marathi","Moldavian","Moldovan","Mongolian","Myanmar","Nepali","Norwegian","Nynorsk","Occitan","Panjabi","Pashto","Persian","Polish","Portuguese","Punjabi","Pushto","Romanian","Russian","Sanskrit","Serbian","Shona","Sindhi","Sinhala","Sinhalese","Slovak","Slovenian","Somali","Spanish","Sundanese","Swahili","Swedish","Tagalog","Tajik","Tamil","Tatar","Telugu","Thai","Tibetan","Turkish","Turkmen","Ukrainian","Urdu","Uzbek","Valencian","Vietnamese","Welsh","Yiddish","Yoruba"]
-    languages = ["Русский"]
+    languages = ["Авто"]
     language_label = ttk.Label(options_frame, text="Язык")
     language_label.configure(state=DISABLED)
     language_label.grid(row=0, column=0, padx=5, pady=5, sticky=E)
     language = StringVar(options_frame)
-    language.set("Русский")
+    language.set("Авто")
     language_optionmenu = ttk.OptionMenu(options_frame, language, *languages)
     language_optionmenu.configure(state=DISABLED)
     language_optionmenu.grid(row=0, column=1, padx=5, pady=5, sticky=W)
