@@ -101,7 +101,7 @@ def whisper_transcribe():
             if percent == 100:
                 style.configure('text.Horizontal.TProgressbar', text='99%')
             current_line = time.strftime('%H:%M:%S: ', time.gmtime(round(segment.start, 2))) + segment.text.removeprefix(" ")
-            logging.debug(current_line)
+            logging.info(current_line)
             transcription += current_line + "\n"
             for word_obj in segment.words:
                 word = regex.sub('', word_obj.word).lower()
