@@ -1,2 +1,5 @@
 faster-whisper
 pydub
+torch
+psutil
+sv_ttk
